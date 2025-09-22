@@ -1,162 +1,140 @@
-# I2C Communication on Linux: A Hands-On Tutorial with MLX90614
+[b]I2C Communication on Linux: A Hands-On Tutorial with MLX90614[/b]
 
-## Table of Contents
+[size=150]Table of Contents[/size]
 
-### 1. Setup
-1.1 MLX90614 Sensor Introduction
-1.2 Hardware Connections
-1.3 Enable I2C Bus in Device Tree
-1.4 Enable i2c-tools
-1.5 Choose Your Implementation Approach
+[list]
+[*]1. Setup
+[list]
+[*]1.1 MLX90614 Sensor Introduction
+[*]1.2 Hardware Connections
+[*]1.3 Enable I2C Bus in Device Tree
+[*]1.4 Enable i2c-tools
+[*]1.5 Choose Your Implementation Approach
+[/list]
+[*]2. Read Sensor Data via Generic I2C Interface
+[list]
+[*]2.1 Use i2c-tools to Read Registers
+[*]2.2 Shell Script to Print Sensor Data
+[*]2.3 C Program to Log Data
+[/list]
+[*]3. Read Sensor Data using Kernel Driver
+[list]
+[*]3.1 Enable Driver in SDK using Kernel Config Tool
+[*]3.2 Specify Driver in Device Tree
+[*]3.3 Shell Commands to Log Sensor Data via Kernel Driver
+[*]3.4 C Program to Log Sensor Data via Kernel Driver
+[/list]
+[*]4. Conclusion
+[/list]
 
-### 2. Read Sensor Data via Generic I2C Interface
-2.1 Use i2c-tools to Read Registers
-2.2 Shell Script to Print Sensor Data
-2.3 C Program to Log Data
-
-### 3. Read Sensor Data using Kernel Driver
-3.1 Enable Driver in SDK using Kernel Config Tool
-3.2 Specify Driver in Device Tree
-3.3 Shell Commands to Log Sensor Data via Kernel Driver
-3.4 C Program to Log Sensor Data via Kernel Driver
-
-### 4. Conclusion
-
----
-
-## 1.1 MLX90614 Sensor Introduction
+[size=150]1.1 MLX90614 Sensor Introduction[/size]
 
 The MLX90614 is a simple I2C non-contact temperature sensor.
 
-**I2C Address:** 0x5A
+[b]I2C Address:[/b] 0x5A
 
-**Registers of Interest:**
-- **0x06** - Ambient Temperature (Ta)
-- **0x07** - Object Temperature (To)
-- **0x0E** - Sensor ID
+[b]Registers of Interest:[/b]
+[list]
+[*][b]0x06[/b] - Ambient Temperature (Ta)
+[*][b]0x07[/b] - Object Temperature (To)
+[*][b]0x0E[/b] - Sensor ID
+[/list]
 
 Each register contains 16 bits (2 bytes) of data.
 
-**Temperature Conversion:**
-```
-Temperature (°C) = (raw_value × 0.02) - 273.15
-```
+[b]Temperature Conversion:[/b]
+[code]Temperature (°C) = (raw_value × 0.02) - 273.15[/code]
 
-*For detailed conversion formulas and accuracy specifications, see the [MLX90614 Datasheet](https://www.melexis.com/-/media/files/documents/datasheets/mlx90614-datasheet-melexis.pdf).*
+[i]For detailed conversion formulas and accuracy specifications, see the [url=https://www.melexis.com/-/media/files/documents/datasheets/mlx90614-datasheet-melexis.pdf]MLX90614 Datasheet[/url].[/i]
 
-**Product Page:** [Waveshare Infrared Temperature Sensor](https://www.waveshare.com/wiki/Infrared_Temperature_Sensor)
+[b]Product Page:[/b] [url=https://www.waveshare.com/wiki/Infrared_Temperature_Sensor]Waveshare Infrared Temperature Sensor[/url]
 
----
+[size=150]1.2 Hardware Connections[/size]
 
-## 1.2 Hardware Connections
+Choose I2C connectors from: [url=https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-Pico-I2C]Luckfox Pico I2C Documentation[/url]
 
-Choose I2C connectors from: [Luckfox Pico I2C Documentation](https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-Pico-I2C)
-
-**Our Choice: I2C2 M0**
-- SDA: Pin 3 (GPIO1_C7)
-- SCL: Pin 5 (GPIO1_D0)
-- VCC: 3.3V
-- GND: Ground
+[b]Our Choice: I2C2 M0[/b]
+[list]
+[*]SDA: Pin 3 (GPIO1_C7)
+[*]SCL: Pin 5 (GPIO1_D0)
+[*]VCC: 3.3V
+[*]GND: Ground
+[/list]
 
 Connect the MLX90614 sensor to these pins.
 
----
-
-## 1.3 Enable I2C Bus in Device Tree
+[size=150]1.3 Enable I2C Bus in Device Tree[/size]
 
 Edit the device tree to enable I2C2. We choose I2C2 M0 since only M0 is exposed on the dev board.
 
-**Note:** `config/dts_config` is a symlink and should be ignored by git. To find the actual file to edit, use:
-```bash
-$ file config/dts_config # Example output: 
-config/dts_config: symbolic link to ../sysdrv/source/kernel/arch/arm64/boot/dts/rockchip/rv1106g-luckfox-pico-ultra-w.dts
-```
+[b]Note:[/b] [i]config/dts_config[/i] is a symlink and should be ignored by git. To find the actual file to edit, use:
+[code]$ file config/dts_config # Example output: 
+config/dts_config: symbolic link to ../sysdrv/source/kernel/arch/arm64/boot/dts/rockchip/rv1106g-luckfox-pico-ultra-w.dts[/code]
 
 Add the following DTS settings at the end of the actual dts file:
 
-```dts
-/**********I2C2**********/
+[code]/**********I2C2**********/
 &i2c2 {
 	status = "okay";
 	clock-frequency = <100000>;
-};
-```
+};[/code]
 
-*Note: For quick testing, you can also temporarily enable I2C2 using `luckfox-config` on the board via SSH as described in the [Luckfox-config documentation](https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-config).*
+[i]Note: For quick testing, you can also temporarily enable I2C2 using [i]luckfox-config[/i] on the board via SSH as described in the [url=https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-config]Luckfox-config documentation[/url].[/i]
 
-## 1.4 Enable i2c-tools
+[size=150]1.4 Enable i2c-tools[/size]
 
-This installs `i2cget`, `i2cset`, `i2cdetect`, and other I2C utilities on the target system.
+This installs [i]i2cget[/i], [i]i2cset[/i], [i]i2cdetect[/i], and other I2C utilities on the target system.
 
-### Enable i2c-tools in Buildroot
+[b]Enable i2c-tools in Buildroot[/b]
 
-**Start Docker Container**
-*Note: If you haven't set up the Docker environment yet, follow the [Luckfox Pico SDK Docker setup guide](https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-Pico-SDK#2-docker-environment) first.*
-```bash
-$ sudo docker start -ai luckfox
+[b]Start Docker Container[/b]
+[i]Note: If you haven't set up the Docker environment yet, follow the [url=https://wiki.luckfox.com/Luckfox-Pico/Luckfox-Pico-RV1106/Luckfox-Pico-Ultra-W/Luckfox-Pico-SDK#2-docker-environment]Luckfox Pico SDK Docker setup guide[/url] first.[/i]
+[code]$ sudo docker start -ai luckfox
 root@container:/# 
 
 # Navigate to build directory
-root@container:/# cd /home/
-root@container:/home# 
-```
+root@container:/home# cd /home/
+root@container:/home# [/code]
 
 There are two ways to enable i2c-tools:
 
-**Method 1: GUI Configuration (Recommended)**
+[b]Method 1: GUI Configuration (Recommended)[/b]
 Run the following command to open a GUI window (ensure your terminal window has enough height):
-```bash
-root@container:/home# ./build.sh buildrootconfig
-```
-Navigate to: `Target packages` → `Hardware handling` → `i2c-tools`
-Enable `i2c-tools` package
+[code]root@container:/home# ./build.sh buildrootconfig[/code]
+Navigate to: [i]Target packages[/i] → [i]Hardware handling[/i] → [i]i2c-tools[/i]
+Enable [i]i2c-tools[/i] package
 Save and exit
 
-**Method 2: Direct File Edit**
+[b]Method 2: Direct File Edit[/b]
 Alternatively, you can directly edit the buildroot configuration file:
-```bash
-root@container:/home# echo "BR2_PACKAGE_I2C_TOOLS=y" >> config/buildroot_defconfig
-```
+[code]root@container:/home# echo "BR2_PACKAGE_I2C_TOOLS=y" >> config/buildroot_defconfig[/code]
 
-Both methods add a `BR2_PACKAGE_I2C_TOOLS=y` line in the buildroot config file. You can verify with:
-```bash
-$ grep I2C_TOOLS config/buildroot_defconfig
-BR2_PACKAGE_I2C_TOOLS=y
-```
+Both methods add a [i]BR2_PACKAGE_I2C_TOOLS=y[/i] line in the buildroot config file. You can verify with:
+[code]$ grep I2C_TOOLS config/buildroot_defconfig
+BR2_PACKAGE_I2C_TOOLS=y[/code]
 
-**Rebuild and Flash**
+[b]Rebuild and Flash[/b]
 
-**Inside Docker container:**
-```bash
-root@container:/home# ./build.sh all
-```
+[b]Inside Docker container:[/b]
+[code]root@container:/home# ./build.sh all[/code]
 
-**Outside Docker container (with sudo):**
-```bash
-$ sudo ./build.sh flash
-```
+[b]Outside Docker container (with sudo):[/b]
+[code]$ sudo ./build.sh flash[/code]
 
-**SSH to Luckfox Board**
-```bash
-ssh root@<board-ip>
-```
+[b]SSH to Luckfox Board[/b]
+[code]ssh root@<board-ip>[/code]
 
-**Verify I2C Bus**
-```bash
-root@luckfox:~# ls /dev/i2c*
-/dev/i2c-2  /dev/i2c-3  /dev/i2c-4
-```
+[b]Verify I2C Bus[/b]
+[code]root@luckfox:~# ls /dev/i2c*
+/dev/i2c-2  /dev/i2c-3  /dev/i2c-4[/code]
 
-We should see `/dev/i2c-2` which corresponds to the I2C2 bus we enabled in the device tree. If we remove the I2C2 configuration from the DTS and rebuild/flash again, `/dev/i2c-2` will disappear.
+We should see [i]/dev/i2c-2[/i] which corresponds to the I2C2 bus we enabled in the device tree. If we remove the I2C2 configuration from the DTS and rebuild/flash again, [i]/dev/i2c-2[/i] will disappear.
 
-**Verify Sensor Detection**
-```bash
-root@luckfox:~# i2cdetect -y 2
-```
+[b]Verify Sensor Detection[/b]
+[code]root@luckfox:~# i2cdetect -y 2[/code]
 
 Expected output:
-```
-     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+[code]     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
 00:                         -- -- -- -- -- -- -- -- 
 10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
 20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
@@ -164,50 +142,46 @@ Expected output:
 40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
 50: -- -- -- -- -- -- -- -- -- -- 5a -- -- -- -- -- 
 60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
-70: -- -- -- -- -- -- -- --   
-```
+70: -- -- -- -- -- -- -- --   [/code]
 
-The `5a` at address 0x5a indicates the MLX90614 sensor is detected and responding on I2C bus 2.
+The [i]5a[/i] at address 0x5a indicates the MLX90614 sensor is detected and responding on I2C bus 2.
 
-**If you see `UU` instead of `5a`:**
+[b]If you see [i]UU[/i] instead of [i]5a[/i]:[/b]
 This means the sensor is being used by a kernel driver. To use i2c-tools, you need to unload the driver first:
-```bash
-root@luckfox:~# rmmod mlx90614
-```
-Then run `i2cdetect -y 2` again to see the `5a` address.
+[code]root@luckfox:~# rmmod mlx90614[/code]
+Then run [i]i2cdetect -y 2[/i] again to see the [i]5a[/i] address.
 
----
-
-## 1.5 Choose Your Implementation Approach
+[size=150]1.5 Choose Your Implementation Approach[/size]
 
 This tutorial covers two different methods for reading data from the MLX90614 temperature sensor on the Luckfox Pico:
 
-### **Method 1: Generic I2C Interface (Sections 2.x)**
-- **Best for**: Learning I2C fundamentals, debugging, custom implementations
-- **Pros**: Direct control, no kernel dependencies, works with any I2C device
-- **Cons**: Manual data conversion, more complex error handling
-- **Tools**: i2c-tools, custom C programs using Linux I2C API
+[b]Method 1: Generic I2C Interface (Sections 2.x)[/b]
+[list]
+[*][b]Best for:[/b] Learning I2C fundamentals, debugging, custom implementations
+[*][b]Pros:[/b] Direct control, no kernel dependencies, works with any I2C device
+[*][b]Cons:[/b] Manual data conversion, more complex error handling
+[*][b]Tools:[/b] i2c-tools, custom C programs using Linux I2C API
+[/list]
 
-### **Method 2: Kernel Driver with IIO Interface (Sections 3.x)**
-- **Best for**: Production applications, standardized sensor interfaces
-- **Pros**: Automatic data conversion, standardized interface, better error handling
-- **Cons**: Requires kernel configuration, more complex setup
-- **Tools**: IIO device files, kernel driver modules
+[b]Method 2: Kernel Driver with IIO Interface (Sections 3.x)[/b]
+[list]
+[*][b]Best for:[/b] Production applications, standardized sensor interfaces
+[*][b]Pros:[/b] Automatic data conversion, standardized interface, better error handling
+[*][b]Cons:[/b] Requires kernel configuration, more complex setup
+[*][b]Tools:[/b] IIO device files, kernel driver modules
+[/list]
 
-**Recommendation**: Start with Method 1 to understand I2C basics, then use Method 2 for production applications.
+[b]Recommendation:[/b] Start with Method 1 to understand I2C basics, then use Method 2 for production applications.
 
----
-
-## 2.1 Use i2c-tools to Read Registers
+[size=150]2.1 Use i2c-tools to Read Registers[/size]
 
 Now that we have i2c-tools installed and can detect our MLX90614 sensor, let's use the tools to read the sensor's registers and extract temperature data.
 
-### Reading Multiple Registers at Once
+[b]Reading Multiple Registers at Once[/b]
 
-You can use `i2cdump` to read a range of registers and get an overview of all sensor data:
+You can use [i]i2cdump[/i] to read a range of registers and get an overview of all sensor data:
 
-```bash
-root@luckfox:~# i2cdump -y 2 0x5a w
+[code]root@luckfox:~# i2cdump -y 2 0x5a w
      0,8  1,9  2,a  3,b  4,c  5,d  6,e  7,f
 00: 2629 0098 XXXX 1a15 XXXX 0008 39b3 3998 
 08: 3bc4 0000 0008 XXXX 04b1 0000 3998 XXXX 
@@ -240,22 +214,22 @@ d8: XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX
 e0: XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX 
 e8: XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX 
 f0: f701 40e6 40da 0024 40dd 40e2 40df 0000 
-f8: 40d9 2d14 XXXX d790 XXXX 40d9 XXXX XXXX 
-```
+f8: 40d9 2d14 XXXX d790 XXXX 40d9 XXXX XXXX [/code]
 
 This shows all registers in a readable format. You can see:
-- Register 0x06: `39b3` (ambient temperature)
-- Register 0x07: `3998` (object temperature)  
-- Register 0x0E: `2629` (sensor ID)
+[list]
+[*]Register 0x06: [i]39b3[/i] (ambient temperature)
+[*]Register 0x07: [i]3998[/i] (object temperature)  
+[*]Register 0x0E: [i]2629[/i] (sensor ID)
+[/list]
 
-The `XXXX` entries indicate registers that are either not readable or contain invalid data.
+The [i]XXXX[/i] entries indicate registers that are either not readable or contain invalid data.
 
-### Reading Individual Registers
+[b]Reading Individual Registers[/b]
 
-The `i2cget` command allows us to read specific registers from the sensor. Since the MLX90614 uses 16-bit registers, we need to read 2 bytes at a time.
+The [i]i2cget[/i] command allows us to read specific registers from the sensor. Since the MLX90614 uses 16-bit registers, we need to read 2 bytes at a time.
 
-```bash
-# Read the three main registers from MLX90614 sensor
+[code]# Read the three main registers from MLX90614 sensor
 root@luckfox:~# i2cget -y 2 0x5a 0x06 w  # Ambient Temperature register
 0x39c2                      # Raw value: 14786 decimal → 22.42°C
 
@@ -263,21 +237,18 @@ root@luckfox:~# i2cget -y 2 0x5a 0x07 w  # Object Temperature register
 0x39cb                      # Raw value: 14795 decimal → 22.64°C
 
 root@luckfox:~# i2cget -y 2 0x5a 0x0e w  # Sensor ID register
-0x3c65                      # Raw value: 15461 decimal → Sensor ID
-```
+0x3c65                      # Raw value: 15461 decimal → Sensor ID[/code]
 
-The `w` flag tells i2cget to read a 16-bit word (2 bytes) in little-endian format, which is what the MLX90614 uses.
+The [i]w[/i] flag tells i2cget to read a 16-bit word (2 bytes) in little-endian format, which is what the MLX90614 uses.
 
-**Note:** Raw register values need to be converted to actual temperatures using the formula:
-```
-Temperature (°C) = (raw_value × 0.02) - 273.15
-```
+[b]Note:[/b] Raw register values need to be converted to actual temperatures using the formula:
+[code]Temperature (°C) = (raw_value × 0.02) - 273.15[/code]
 
-## 2.2 Shell Script to Print Sensor Data
-Using `i2cget`, we can use the script to log sensor data. For simplicity, we create `read_mlx90614.sh` directly in the luckfox `/root/` directory:
+[size=150]2.2 Shell Script to Print Sensor Data[/size]
 
-```bash
-#!/bin/bash
+Using [i]i2cget[/i], we can use the script to log sensor data. For simplicity, we create [i]read_mlx90614.sh[/i] directly in the luckfox [i]/root/[/i] directory:
+
+[code]#!/bin/bash
 
 I2C_BUS="2"
 SENSOR_ADDR="0x5a"
@@ -316,12 +287,10 @@ while true; do
     
     echo "---"
     sleep 2
-done
-```
+done[/code]
 
-**Sample output from running the script:**
-```bash
-root@luckfox:~# ./read_mlx90614.sh
+[b]Sample output from running the script:[/b]
+[code]root@luckfox:~# ./read_mlx90614.sh
 MLX90614 Temperature Reader (Ctrl+C to exit)
 =============================================
 Ambient: 22.33°C
@@ -333,40 +302,34 @@ Object:  22.07°C
 Ambient: 22.35°C
 Object:  21.95°C
 ---
-...
-```
+...[/code]
 
 The script continuously monitors both ambient and object temperatures, updating every 2 seconds. Press Ctrl+C to exit.
 
-**Note:** This script uses `bc` for floating-point calculations. In this Buildroot configuration, `bc` is provided by busybox, if you are using `systemd` you can enable bc in buildroot config:
+[b]Note:[/b] This script uses [i]bc[/i] for floating-point calculations. In this Buildroot configuration, [i]bc[/i] is provided by busybox, if you are using [i]systemd[/i] you can enable bc in buildroot config:
 
-```bash
-# Inside Docker container
-root@container:/home# ./build.sh buildrootconfig
-```
-Navigate to: `Target packages` → `Miscellaneous` → `bc`
-Enable the `bc` package and save the configuration.
+[code]# Inside Docker container
+root@container:/home# ./build.sh buildrootconfig[/code]
+Navigate to: [i]Target packages[/i] → [i]Miscellaneous[/i] → [i]bc[/i]
+Enable the [i]bc[/i] package and save the configuration.
 
-## 2.3 C Program to Log Data
+[size=150]2.3 C Program to Log Data[/size]
 
 While shell scripts are convenient for quick testing, C programs offer better performance and more control over I2C communication. Let's create a C program that directly interfaces with the I2C bus.
 
-### The C Program
+[b]The C Program[/b]
 
-**Project Structure:**
-```
-project/app/read_MLX90614/
+[b]Project Structure:[/b]
+[code]project/app/read_MLX90614/
 ├── read_mlx90614.c      # C program source code
 ├── read_mlx90614.sh     # Shell script version
 ├── Makefile             # Build configuration
-└── i2c_read_tutorial.md # This tutorial
-```
-**Note:** We've put the .sh file in the project as well for convenience
+└── i2c_read_tutorial.md # This tutorial[/code]
+[i]Note:[/i] We've put the .sh file in the project as well for convenience
 
-Create `read_mlx90614.c`:
+Create [i]read_mlx90614.c[/i]:
 
-```c
-#include <stdio.h>
+[code]#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -462,13 +425,11 @@ int main() {
     
     close(i2c_fd);
     return 0;
-}
-```
+}[/code]
 
 Create Makefile
 
-```makefile
-# Include Luckfox SDK build parameters
+[code]# Include Luckfox SDK build parameters
 ifeq ($(APP_PARAM), )
     APP_PARAM := ../Makefile.param
     include $(APP_PARAM)
@@ -513,27 +474,23 @@ distclean: clean
 
 # Show build information
 info:
-	@echo "This is $(PKG_NAME) for $(RK_APP_CHIP) with $(RK_APP_CROSS)"
-```
+	@echo "This is $(PKG_NAME) for $(RK_APP_CHIP) with $(RK_APP_CROSS)"[/code]
 
-**Note:** The Makefile copies both the compiled C program (`read_MLX90614`) and the shell script (`read_mlx90614.sh`) to the output directory. This gives users the choice between running the high-performance C program or the simpler shell script version.
+[i]Note:[/i] The Makefile copies both the compiled C program ([i]read_MLX90614[/i]) and the shell script ([i]read_mlx90614.sh[/i]) to the output directory. This gives users the choice between running the high-performance C program or the simpler shell script version.
 
-**Expected files after build and flash:**
+[b]Expected files after build and flash:[/b]
 After building and flashing, you should find these files on the target system:
 
-```bash
-# On the target board (via SSH)
+[code]# On the target board (via SSH)
 root@luckfox:~# pwd
 /oem/usr/bin
 root@luckfox:~# ls read_*
-read_mlx90614     read_mlx90614.sh
-```
+read_mlx90614     read_mlx90614.sh[/code]
 
 Both executables are now available system-wide and can be run from any directory.
 
-**Sample output:**
-```bash
-# Run the shell script
+[b]Sample output:[/b]
+[code]# Run the shell script
 root@luckfox:~# ./read_mlx90614.sh 
 MLX90614 Temperature Reader (Ctrl+C to exit)
 =============================================
@@ -555,104 +512,85 @@ Object:  22.8°C
 Ambient: 23.2°C
 Object:  23.1°C
 ---
-^C
-```
+^C[/code]
 
-
-
-## 3.1 Enable Driver in SDK using Kernel Config Tool
-
+[size=150]3.1 Enable Driver in SDK using Kernel Config Tool[/size]
 
 The MLX90614 kernel driver is already included in the Luckfox Buildroot SDK. The source code is located in the kernel source tree:
 
-```bash
-# Driver source file
-sysdrv/source/kernel/drivers/iio/temperature/mlx90614.c
-```
+[code]# Driver source file
+sysdrv/source/kernel/drivers/iio/temperature/mlx90614.c[/code]
 This driver provides a standardized IIO (Industrial I/O) interface for reading sensor data.
 
-**Why is the I2C sensor driver under IIO?**
+[b]Why is the I2C sensor driver under IIO?[/b]
 
-**IIO (Industrial I/O)** is a Linux kernel framework designed specifically for sensors and data acquisition devices. IIO device drivers are purpose-built for sensors - they provide automatic data conversion (raw values to physical units), standardized sensor interfaces, and create consistent user-space files like `in_temp_ambient_raw` for easy access. Whereas I2C device drivers are generic communication drivers that only handle raw data transfer and would require custom interfaces for each sensor type, making them too low-level for sensor applications.
+[i]IIO (Industrial I/O)[/i] is a Linux kernel framework designed specifically for sensors and data acquisition devices. IIO device drivers are purpose-built for sensors - they provide automatic data conversion (raw values to physical units), standardized sensor interfaces, and create consistent user-space files like [i]in_temp_ambient_raw[/i] for easy access. Whereas I2C device drivers are generic communication drivers that only handle raw data transfer and would require custom interfaces for each sensor type, making them too low-level for sensor applications.
 
-**Kernel Configuration Options**
+[b]Kernel Configuration Options[/b]
 
 There are 3 options for a Kernel Driver Configuration:
-- **`n` (No)**: Driver is not compiled
-- **`m` (Module)**: Driver is compiled as a loadable kernel module (recommended)
-- **`y` (Yes)**: Driver is compiled directly into the kernel (built-in)
+[list]
+[*][i]n[/i] (No): Driver is not compiled
+[*][i]m[/i] (Module): Driver is compiled as a loadable kernel module (recommended)
+[*][i]y[/i] (Yes): Driver is compiled directly into the kernel (built-in)
+[/list]
 
-We will enable the driver as a module. 
+We will enable the driver as a module.
 
-### Enable the MLX90614 Driver
+[b]Enable the MLX90614 Driver[/b]
 
-**Configure Kernel:**
+[b]Configure Kernel:[/b]
 Run the build process in the Luckfox Docker container:
-*(See the [official guide](https://wiki.luckfox.com/Luckfox-Pico-Ultra/Docker-Image-Build) on setting up the Docker environment)*
+[i](See the [url=https://wiki.luckfox.com/Luckfox-Pico-Ultra/Docker-Image-Build]official guide[/url] on setting up the Docker environment)[/i]
 
 There are two ways to enable the MLX90614 driver:
 
-**Method 1: GUI Configuration (Recommended)**
-In `/home/` of the docker container, run the following command to open a GUI window (ensure your terminal window has enough height):
-```bash
-root@container:/home# ./build.sh kernelconfig
-```
-Navigate to `Device Drivers` → `Industrial I/O support` → `Temperature sensors` and set `MLX90614 contactless IR temperature sensor` to `M` (Module).
+[b]Method 1: GUI Configuration (Recommended)[/b]
+In [i]/home/[/i] of the docker container, run the following command to open a GUI window (ensure your terminal window has enough height):
+[code]root@container:/home# ./build.sh kernelconfig[/code]
+Navigate to [i]Device Drivers[/i] → [i]Industrial I/O support[/i] → [i]Temperature sensors[/i] and set [i]MLX90614 contactless IR temperature sensor[/i] to [i]M[/i] (Module).
 
-**Method 2: Direct File Edit**
+[b]Method 2: Direct File Edit[/b]
 Alternatively, you can directly edit the kernel configuration file:
-```bash
-root@container:/home# echo "CONFIG_MLX90614=m" >> config/kernel_defconfig
-```
+[code]root@container:/home# echo "CONFIG_MLX90614=m" >> config/kernel_defconfig[/code]
 
-Both methods add a `CONFIG_MLX90614` line in the kernel config file. You can verify with:
-```bash
-root@container:/home# grep MLX90614 config/kernel_defconfig
-CONFIG_MLX90614=m
-```
+Both methods add a [i]CONFIG_MLX90614[/i] line in the kernel config file. You can verify with:
+[code]root@container:/home# grep MLX90614 config/kernel_defconfig
+CONFIG_MLX90614=m[/code]
 
-**Build and Flash**
+[b]Build and Flash[/b]
 Build the kernel and firmware, then flash to the board.
 
-### Verify Driver Loading
+[b]Verify Driver Loading[/b]
 
-**SSH to the board and check if the module file exists:**
-```bash
-root@luckfox:~# ls /oem/usr/ko/mlx*
-ko/mlx90614.ko
-```
+[b]SSH to the board and check if the module file exists:[/b]
+[code]root@luckfox:~# ls /oem/usr/ko/mlx*
+ko/mlx90614.ko[/code]
 
-**Load the MLX90614 module:**
-```bash
-root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko
-```
+[b]Load the MLX90614 module:[/b]
+[code]root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko[/code]
 
-*Note: We use `insmod` instead of `modprobe` because the system uses busybox, which doesn't have the full modprobe functionality expected in standard Linux distributions.*
+[i]Note: We use [i]insmod[/i] instead of [i]modprobe[/i] because the system uses busybox, which doesn't have the full modprobe functionality expected in standard Linux distributions.[/i]
 
-**Check if driver is loaded:**
-```bash
-root@luckfox:~# lsmod | grep mlx90614
-mlx90614                4331  0
-```
+[b]Check if driver is loaded:[/b]
+[code]root@luckfox:~# lsmod | grep mlx90614
+mlx90614                4331  0[/code]
 
-**Check IIO device:**
-```bash
-root@luckfox:~# ls /sys/bus/iio/devices/
-iio:device0
-```
+[b]Check IIO device:[/b]
+[code]root@luckfox:~# ls /sys/bus/iio/devices/
+iio:device0[/code]
 
-*Note: At this point, you won't see the MLX90614 IIO device yet because the device tree configuration hasn't been set up. The driver is loaded but doesn't know where to find the sensor. This will be resolved in the next section when we configure the device tree.*
+[i]Note: At this point, you won't see the MLX90614 IIO device yet because the device tree configuration hasn't been set up. The driver is loaded but doesn't know where to find the sensor. This will be resolved in the next section when we configure the device tree.[/i]
 
-## 3.2 Specify Driver in Device Tree
+[size=150]3.2 Specify Driver in Device Tree[/size]
 
 The MLX90614 device tree configuration is already included in the Luckfox SDK. The driver needs to know which I2C bus and address to use, which is specified in the device tree.
 
-### Existing Device Tree Configuration
+[b]Existing Device Tree Configuration[/b]
 
-The Luckfox SDK already includes the MLX90614 device tree configuration in `rv1106g-luckfox-pico-ultra-w.dts`:
+The Luckfox SDK already includes the MLX90614 device tree configuration in [i]rv1106g-luckfox-pico-ultra-w.dts[/i]:
 
-```dts
-/**********I2C2**********/
+[code]/**********I2C2**********/
 &i2c2 {
 	status = "okay";                    
 	clock-frequency = <100000>;  
@@ -662,51 +600,37 @@ The Luckfox SDK already includes the MLX90614 device tree configuration in `rv11
 		compatible = "melexis,mlx90614";    //Matches the driver's compatible string
 		reg = <0x5a>;                       //I2C address
 	};                                      
-};
-```
+};[/code]
 
 The device tree tells the kernel exactly where to find the MLX90614 sensor, enabling automatic driver loading and IIO interface creation.
 
-
 After build, flash, and SSH, verify the MLX90614 sensor is now detected:
 
-**Load the MLX90614 module with `insmod`**
-```bash
-root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko
-```
+[b]Load the MLX90614 module with [i]insmod[/i][/b]
+[code]root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko[/code]
 
-**Check if driver is loaded with `lsmod`**
-```bash
-root@luckfox:~# lsmod | grep mlx90614
-mlx90614                4331  0
-```
+[b]Check if driver is loaded with [i]lsmod[/i][/b]
+[code]root@luckfox:~# lsmod | grep mlx90614
+mlx90614                4331  0[/code]
 
-**Verify IIO device creation:**
-```bash
-root@luckfox:~# ls /sys/bus/iio/devices/
-iio:device0  iio:device1
-```
+[b]Verify IIO device creation:[/b]
+[code]root@luckfox:~# ls /sys/bus/iio/devices/
+iio:device0  iio:device1[/code]
 
-**Verify sensor name:**
-```bash
-root@luckfox:~# cat /sys/bus/iio/devices/iio:device1/name
-mlx90614
-```
-Now we have the MLX90614 sensor as IIO devices on `iio:device1`
+[b]Verify sensor name:[/b]
+[code]root@luckfox:~# cat /sys/bus/iio/devices/iio:device1/name
+mlx90614[/code]
+Now we have the MLX90614 sensor as IIO devices on [i]iio:device1[/i]
 
-
-**Check sensor files:**
-```bash
-root@luckfox:~# ls /sys/bus/iio/devices/iio:device1/
+[b]Check sensor files:[/b]
+[code]root@luckfox:~# ls /sys/bus/iio/devices/iio:device1/
 in_temp_ambient_raw  in_temp_object_raw  name  power  subsystem  uevent
-in_temp_offset       in_temp_scale
-```
+in_temp_offset       in_temp_scale[/code]
 
-The presence of `in_temp_ambient_raw`, `in_temp_object_raw`, `in_temp_scale`, and `in_temp_offset` files indicates the MLX90614 driver is working correctly and has detected the sensor.
+The presence of [i]in_temp_ambient_raw[/i], [i]in_temp_object_raw[/i], [i]in_temp_scale[/i], and [i]in_temp_offset[/i] files indicates the MLX90614 driver is working correctly and has detected the sensor.
 
-**Read sensor values using kernel driver:**
-```bash
-# Read ambient temperature (raw value)
+[b]Read sensor values using kernel driver:[/b]
+[code]# Read ambient temperature (raw value)
 root@luckfox:~# cat /sys/bus/iio/devices/iio:device1/in_temp_ambient_raw
 14811
 
@@ -720,28 +644,24 @@ root@luckfox:~# cat /sys/bus/iio/devices/iio:device1/in_temp_scale
 
 # Read temperature offset
 root@luckfox:~# cat /sys/bus/iio/devices/iio:device1/in_temp_offset
--13657.500000
-```
+-13657.500000[/code]
 
-**Convert raw values to Celsius:**
+[b]Convert raw values to Celsius:[/b]
 
-Formula: `(raw + offset) * scale / 1000`
-```bash
-# Ambient temperature: (14811 + (-13657.5)) * 20 / 1000 = 22.7°C
+Formula: [i](raw + offset) * scale / 1000[/i]
+[code]# Ambient temperature: (14811 + (-13657.5)) * 20 / 1000 = 22.7°C
 root@luckfox:~# echo "scale=1; (($(cat /sys/bus/iio/devices/iio:device1/in_temp_ambient_raw) + $(cat /sys/bus/iio/devices/iio:device1/in_temp_offset)) * $(cat /sys/bus/iio/devices/iio:device1/in_temp_scale)) / 1000" | bc -l
 22.7
 
 # Object temperature: (14821 + (-13657.5)) * 20 / 1000 = 22.9°C
 root@luckfox:~# echo "scale=1; (($(cat /sys/bus/iio/devices/iio:device1/in_temp_object_raw) + $(cat /sys/bus/iio/devices/iio:device1/in_temp_offset)) * $(cat /sys/bus/iio/devices/iio:device1/in_temp_scale)) / 1000" | bc -l
-22.9
-```
+22.9[/code]
 
-**Unloading the Driver with `rmmod`**
+[b]Unloading the Driver with [i]rmmod[/i][/b]
 
 When you're done testing with the kernel driver, you can unload it to free up the I2C bus for other applications:
 
-```bash
-# Unload the MLX90614 kernel driver
+[code]# Unload the MLX90614 kernel driver
 root@luckfox:~# rmmod mlx90614
 
 # Verify the driver is unloaded
@@ -758,26 +678,21 @@ root@luckfox:~# i2cdetect -y 2
 40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
 50: -- -- -- -- -- -- -- -- -- -- 5a -- -- -- -- -- 
 60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
-70: -- -- -- -- -- -- -- --   
-```
+70: -- -- -- -- -- -- -- --   [/code]
 
 Now you can use the generic I2C tools (i2cget, i2cset, etc.) to communicate directly with the sensor.
 
+This confirms that [i]iio:device1[/i] is indeed the MLX90614 sensor and shows how to read temperature values using the kernel driver.
 
-
-
-This confirms that `iio:device1` is indeed the MLX90614 sensor and shows how to read temperature values using the kernel driver.
-
-## 3.3 Shell Commands to Log Sensor Data via Kernel Driver
+[size=150]3.3 Shell Commands to Log Sensor Data via Kernel Driver[/size]
 
 Now that we have the MLX90614 kernel driver loaded and the IIO interface available, we can create a shell script that reads temperature data directly from the IIO device files.
 
-### IIO Shell Script
+[b]IIO Shell Script[/b]
 
-Create `read_mlx90614_iio.sh`:
+Create [i]read_mlx90614_iio.sh[/i]:
 
-```bash
-#!/bin/bash
+[code]#!/bin/bash
 
 # MLX90614 IIO Temperature Reader Script
 # This script reads temperature data from MLX90614 sensor via IIO interface
@@ -842,34 +757,34 @@ while true; do
     read_temperature "$AMBIENT_RAW" "Ambient"  # Read ambient temperature 
     echo "---"
     sleep 2    # Wait 2 seconds before next reading
-done
-```
+done[/code]
 
-### How the IIO Script Works
+[b]How the IIO Script Works[/b]
 
-**Key Differences from I2C Script:**
-1. **Uses IIO Interface**: Reads from `/sys/bus/iio/devices/iio:device1/` instead of raw I2C registers
-2. **Automatic Conversion**: Uses the driver-provided scale and offset values for accurate temperature conversion
-3. **Error Handling**: Checks for IIO device presence and file availability
-4. **Standard Formula**: Uses the IIO standard formula `(raw + offset) * scale / 1000`
+[b]Key Differences from I2C Script:[/b]
+[list]
+[*][b]Uses IIO Interface:[/b] Reads from [i]/sys/bus/iio/devices/iio:device1/[/i] instead of raw I2C registers
+[*][b]Automatic Conversion:[/b] Uses the driver-provided scale and offset values for accurate temperature conversion
+[*][b]Error Handling:[/b] Checks for IIO device presence and file availability
+[*][b]Standard Formula:[/b] Uses the IIO standard formula [i](raw + offset) * scale / 1000[/i]
+[/list]
 
-**Temperature Conversion:**
+[b]Temperature Conversion:[/b]
 The script uses the formula provided by the MLX90614 driver:
-```
-Temperature (°C) = (raw_value + offset) * scale / 1000
-```
+[code]Temperature (°C) = (raw_value + offset) * scale / 1000[/code]
 
 Where:
-- `raw_value`: Raw sensor reading from IIO device
-- `offset`: -13657.5 (Kelvin offset from driver)
-- `scale`: 20 (represents 0.02 Kelvin per raw unit)
+[list]
+[*][i]raw_value[/i]: Raw sensor reading from IIO device
+[*][i]offset[/i]: -13657.5 (Kelvin offset from driver)
+[*][i]scale[/i]: 20 (represents 0.02 Kelvin per raw unit)
+[/list]
 
-### Running the IIO Script
+[b]Running the IIO Script[/b]
 
-**Important:** Before running the IIO script, you must load the MLX90614 kernel driver:
+[b]Important:[/b] Before running the IIO script, you must load the MLX90614 kernel driver:
 
-```bash
-# Load the MLX90614 kernel module
+[code]# Load the MLX90614 kernel module
 root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko
 
 # Verify the driver is loaded
@@ -899,33 +814,29 @@ Ambient Temperature: 22.72°C
 Object Temperature: 22.93°C
 Ambient Temperature: 22.68°C
 ---
-^C
-```
+^C[/code]
 
-## 3.4 C Program to Log Sensor Data via Kernel Driver
+[size=150]3.4 C Program to Log Sensor Data via Kernel Driver[/size]
 
 While the IIO shell script is convenient for quick testing, a C program offers better performance and more control over sensor data reading. Let's create a C program that reads temperature data directly from the IIO device files.
 
-### The IIO C Program
+[b]The IIO C Program[/b]
 
-**Project Structure:**
-```
-project/app/read_MLX90614/
+[b]Project Structure:[/b]
+[code]project/app/read_MLX90614/
 ├── read_mlx90614.c          # I2C C program source code
 ├── read_mlx90614_iio.c      # IIO C program source code
 ├── read_mlx90614.sh         # I2C shell script version
 ├── read_mlx90614_iio.sh     # IIO shell script version
 ├── Makefile                 # Build configuration
-└── i2c_read_tutorial.md     # This tutorial
-```
+└── i2c_read_tutorial.md     # This tutorial[/code]
 
-**Why Dynamic Device Discovery?**
-The IIO device number (e.g., `iio:device1`) can vary depending on system configuration and the order in which drivers are loaded. Using dynamic discovery makes your code more robust and portable.
+[b]Why Dynamic Device Discovery?[/b]
+The IIO device number (e.g., [i]iio:device1[/i]) can vary depending on system configuration and the order in which drivers are loaded. Using dynamic discovery makes your code more robust and portable.
 
-Create `read_mlx90614_iio.c` with dynamic device discovery:
+Create [i]read_mlx90614_iio.c[/i] with dynamic device discovery:
 
-```c
-#include <stdio.h>
+[code]#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -1023,35 +934,12 @@ int read_temperature(const char *raw_file, const char *scale_file, const char *o
     return 0;
 }
 
-// Function to check if sensor is present
-int check_sensor() {
-    char name_buffer[32];
-    
-    if (read_file_value(NAME_PATH, name_buffer, sizeof(name_buffer)) != 0) {
-        printf("✗ MLX90614 sensor not found at %s\n", IIO_DEVICE_PATH);
-        printf("Make sure the module is loaded: insmod /oem/usr/ko/mlx90614.ko\n");
-        return -1;
-    }
-    
-    // Remove newline if present
-    name_buffer[strcspn(name_buffer, "\n")] = 0;
-    
-    if (strcmp(name_buffer, "mlx90614") != 0) {
-        printf("✗ Unexpected sensor name: %s\n", name_buffer);
-        return -1;
-    }
-    
-    printf("✓ MLX90614 sensor found at %s\n", IIO_DEVICE_PATH);
-    return 0;
-}
-
 int main() {
     char iio_device_path[MAX_PATH_LEN];
     char object_raw_path[MAX_PATH_LEN];
     char ambient_raw_path[MAX_PATH_LEN];
     char scale_path[MAX_PATH_LEN];
     char offset_path[MAX_PATH_LEN];
-    char name_path[MAX_PATH_LEN];
     double object_temp, ambient_temp;
     
     printf("MLX90614 Temperature Reader (Ctrl+C to exit)\n");
@@ -1071,7 +959,6 @@ int main() {
     snprintf(ambient_raw_path, sizeof(ambient_raw_path), "%s/in_temp_ambient_raw", iio_device_path);
     snprintf(scale_path, sizeof(scale_path), "%s/in_temp_scale", iio_device_path);
     snprintf(offset_path, sizeof(offset_path), "%s/in_temp_offset", iio_device_path);
-    snprintf(name_path, sizeof(name_path), "%s/name", iio_device_path);
     
     printf("\n");
     
@@ -1092,46 +979,38 @@ int main() {
     }
     
     return 0;
-}
-```
+}[/code]
 
-### Updated Makefile
+[b]Updated Makefile[/b]
 
 The Makefile has been updated to compile both C programs:
 
-```makefile
-read_mlx90614-build:
+[code]read_mlx90614-build:
 	@rm -rf $(PKG_BIN); \
 	mkdir -p $(PKG_BIN)/bin
 	# Compile I2C C program
-	$(RK_APP_CROSS)-gcc $(READ_MLX90614_CFLAGS) read_mlx90614.c -o $(PKG_BIN)/bin/read_mlx90614 $(READ_MLX90614_LDFLAGS)
+	$(RK_APP_CROSS)-gcc $(READ_MLX90614_CFLAGS) read_mlx90614.c -o $(PKG_BIN)/bin/read_MLX90614 $(READ_MLX90614_LDFLAGS)
 	# Compile IIO C program
-	$(RK_APP_CROSS)-gcc $(READ_MLX90614_CFLAGS) read_mlx90614_iio.c -o $(PKG_BIN)/bin/read_mlx90614_iio $(READ_MLX90614_LDFLAGS)
+	$(RK_APP_CROSS)-gcc $(READ_MLX90614_CFLAGS) read_mlx90614_iio.c -o $(PKG_BIN)/bin/read_MLX90614_iio $(READ_MLX90614_LDFLAGS)
 	# Copy shell scripts and make them executable
 	cp read_mlx90614.sh $(PKG_BIN)/bin/
 	chmod +x $(PKG_BIN)/bin/read_mlx90614.sh
 	cp read_mlx90614_iio.sh $(PKG_BIN)/bin/
 	chmod +x $(PKG_BIN)/bin/read_mlx90614_iio.sh
 	# Copy built files to app output directory
-	$(call MAROC_COPY_PKG_TO_APP_OUTPUT, $(RK_APP_OUTPUT), $(PKG_BIN))
-```
+	$(call MAROC_COPY_PKG_TO_APP_OUTPUT, $(RK_APP_OUTPUT), $(PKG_BIN))[/code]
 
-
-
-### Expected Files After Build
+[b]Expected Files After Build[/b]
 
 After building and flashing, you should find these files on the target system:
 
-```bash
-# On the target board (via SSH)
+[code]# On the target board (via SSH)
 root@luckfox:~# ls /oem/usr/bin/read_*
-read_mlx90614      read_mlx90614_iio   read_mlx90614.sh   read_mlx90614_iio.sh
-```
+read_mlx90614      read_mlx90614_iio   read_mlx90614.sh   read_mlx90614_iio.sh[/code]
 
-### Sample Output
+[b]Sample Output[/b]
 
-```bash
-# Load the driver first
+[code]# Load the driver first
 root@luckfox:~# insmod /oem/usr/ko/mlx90614.ko
 
 # Run the IIO C program
@@ -1146,52 +1025,61 @@ Ambient Temperature: 22.70°C
 Object Temperature: 22.97°C
 Ambient Temperature: 22.72°C
 ---
-^C
-```
+^C[/code]
 
----
-
-## 4. Conclusion
+[size=150]4. Conclusion[/size]
 
 This tutorial has demonstrated two comprehensive approaches for reading data from the MLX90614 temperature sensor on the Luckfox Pico platform:
 
-### **What We've Covered**
+[b]What We've Covered[/b]
 
-**Setup and Configuration**
-- Hardware connections and pin assignments
-- Device tree configuration for I2C2 bus
-- Enabling i2c-tools and kernel drivers
-- Building and flashing the complete system
+[b]Setup and Configuration[/b]
+[list]
+[*]Hardware connections and pin assignments
+[*]Device tree configuration for I2C2 bus
+[*]Enabling i2c-tools and kernel drivers
+[*]Building and flashing the complete system
+[/list]
 
-**Implementation Methods**
-- **Generic I2C Interface**: Direct communication using i2c-tools and custom C programs
-- **Kernel Driver with IIO**: Production-ready approach using standardized sensor interfaces
+[b]Implementation Methods[/b]
+[list]
+[*][b]Generic I2C Interface:[/b] Direct communication using i2c-tools and custom C programs
+[*][b]Kernel Driver with IIO:[/b] Production-ready approach using standardized sensor interfaces
+[/list]
 
-**Key Features Implemented**
-- Dynamic device discovery for robust operation
-- Multiple implementation options (C programs and shell scripts)
-- Comprehensive error handling and validation
-- Real-time temperature monitoring with proper conversion
+[b]Key Features Implemented[/b]
+[list]
+[*]Dynamic device discovery for robust operation
+[*]Multiple implementation options (C programs and shell scripts)
+[*]Comprehensive error handling and validation
+[*]Real-time temperature monitoring with proper conversion
+[/list]
 
-### **Next Steps**
+[b]Next Steps[/b]
 
 Now that you have a working MLX90614 sensor interface, you can:
 
-1. **Extend the functionality**: Add data logging, web interfaces, or integration with other sensors
-2. **Apply the concepts**: Use the I2C and IIO techniques with other sensors
-3. **Optimize performance**: Implement custom sampling rates or filtering algorithms
-4. **Integrate with applications**: Connect the sensor data to your main application logic
+[list]
+[*][b]Extend the functionality:[/b] Add data logging, web interfaces, or integration with other sensors
+[*][b]Apply the concepts:[/b] Use the I2C and IIO techniques with other sensors
+[*][b]Optimize performance:[/b] Implement custom sampling rates or filtering algorithms
+[*][b]Integrate with applications:[/b] Connect the sensor data to your main application logic
+[/list]
 
-### **Learning Outcomes**
+[b]Learning Outcomes[/b]
 
 By completing this tutorial, you've gained practical experience with:
-- I2C communication protocols and debugging
-- Linux kernel driver development and IIO framework
-- Cross-compilation and embedded Linux development
-- Device tree configuration and hardware integration
-- Professional embedded software development practices
+[list]
+[*]I2C communication protocols and debugging
+[*]Linux kernel driver development and IIO framework
+[*]Cross-compilation and embedded Linux development
+[*]Device tree configuration and hardware integration
+[*]Professional embedded software development practices
+[/list]
 
 The techniques and patterns demonstrated here can be applied to integrate virtually any I2C sensor with the Luckfox Pico platform, making this tutorial a valuable foundation for your embedded Linux projects.
 
----
+[quote]This tutorial provides a comprehensive guide for working with I2C sensors on the Luckfox Pico platform, covering both low-level I2C communication and high-level kernel driver approaches. The examples are production-ready and can be easily adapted for other sensors.[/quote]
+
+:) Happy coding with your MLX90614 sensor! ;)
 
